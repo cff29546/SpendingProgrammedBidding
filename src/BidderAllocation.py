@@ -80,3 +80,24 @@ class OracleAllocator(Allocator):
 
     def estimate_CTR(self, context):
         return sigmoid(self.item_embeddings @ context)
+
+class IsotonicPerturbationOracleAllocator(Allocator):
+    """ An allocator that acts based on the true P(click) with simulated isotonic perturbation"""
+
+    def __init__(self, rng, diff_range, diff_step):
+        self.item_embeddings = None
+        self.diff_range = np.abs(diff_range)
+        self.diff_step = diff_step
+        self.diff = 0
+        self.diff = np.minimum(np.maximum(rng.normal(0.0, self.diff_step, size=(1,))[0] + self.diff, -self.diff_range), self.diff_range)
+        super(IsotonicPerturbationOracleAllocator, self).__init__(rng)
+
+    def update_item_embeddings(self, item_embeddings):
+        self.item_embeddings = item_embeddings
+
+    def estimate_CTR(self, context):
+        return sigmoid(self.item_embeddings @ context) * self.diff
+
+    def update(self, contexts, items, outcomes, iteration, plot, figsize, fontsize, name):
+        self.diff = np.minimum(np.maximum(self.rng.normal(0.0, self.diff_step, size=(1,))[0] + self.diff, -self.diff_range), self.diff_range)
+

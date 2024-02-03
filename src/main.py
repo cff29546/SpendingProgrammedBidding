@@ -89,7 +89,7 @@ def instantiate_agents(rng, agent_configs, agents2item_values, agents2items):
     ]
 
     for agent in agents:
-        if isinstance(agent.allocator, OracleAllocator):
+        if isinstance(agent.allocator, OracleAllocator) or isinstance(agent.allocator, IsotonicPerturbationOracleAllocator):
             agent.allocator.update_item_embeddings(agents2items[agent.name])
 
     return agents

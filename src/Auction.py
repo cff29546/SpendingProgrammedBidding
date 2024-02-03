@@ -3,7 +3,7 @@ from Bidder import Bidder
 
 import numpy as np
 
-from BidderAllocation import OracleAllocator
+from BidderAllocation import OracleAllocator, IsotonicPerturbationOracleAllocator
 from Models import sigmoid
 
 class Auction:
@@ -43,7 +43,7 @@ class Auction:
         participating_agents = [self.agents[idx] for idx in participating_agents_idx]
         for agent in participating_agents:
             # Get the bid and the allocated item
-            if isinstance(agent.allocator, OracleAllocator):
+            if isinstance(agent.allocator, OracleAllocator) or isinstance(agent.allocator, IsotonicPerturbationOracleAllocator):
                 bid, item = agent.bid(true_context)
             else:
                 bid, item = agent.bid(obs_context)
