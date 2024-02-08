@@ -3,12 +3,13 @@ import numpy as np
 from BidderAllocation import PyTorchLogisticRegressionAllocator, OracleAllocator
 from Impression import ImpressionOpportunity
 from Models import sigmoid
+from Bidder import BudgetRistrictedBidder
 
 
 class Agent:
     ''' An agent representing an advertiser '''
 
-    def __init__(self, rng, name, num_items, item_values, allocator, bidder, memory=0):
+    def __init__(self, rng, name, num_items, item_values, allocator, bidder, memory=0, postback_delay=0):
         self.rng = rng
         self.name = name
         self.num_items = num_items
@@ -18,6 +19,7 @@ class Agent:
 
         self.net_utility = .0
         self.gross_utility = .0
+        self.spending = .0
 
         self.logs = []
 
@@ -25,6 +27,8 @@ class Agent:
         self.bidder = bidder
 
         self.memory = memory
+        self.postback_delay = postback_delay
+        self.result_cache = []
 
     def select_item(self, context):
         # Estimate CTR for all items
@@ -67,14 +71,39 @@ class Agent:
 
         return bid, best_item
 
-    def charge(self, price, second_price, outcome):
+    def charge(self, price, second_price, outcome, round):
         self.logs[-1].set_price_outcome(price, second_price, outcome, won=True)
         last_value = self.logs[-1].value * outcome
         self.net_utility += (last_value - price)
         self.gross_utility += last_value
+        self.spending += price
+        if hasattr(self.bidder, 'charge'):
+            self.bidder.charge(price, round)
 
-    def set_price(self, price):
+    def set_price(self, price, round):
         self.logs[-1].set_price(price)
+        if hasattr(self.bidder, 'charge'):
+            self.bidder.charge(0, round)
+
+    def calc_perf_group(self):
+        self.acc_value = .0
+        self.acc_spending = .0
+        self.under_value = .0
+        self.under_spending = .0
+        self.violation_value = .0
+        self.violation_spending = .0
+
+        if self.spending > 0:
+            roi_vs_target = self.gross_utility / self.spending
+            if roi_vs_target < 0.8:
+                self.violation_value += self.gross_utility
+                self.violation_spending += self.spending
+            elif isinstance(self.bidder, BudgetRistrictedBidder) and self.spending < self.bidder.budget * 0.9 and roi_vs_target > 1.2:
+                self.under_value += self.gross_utility
+                self.under_spending += self.spending
+            else:
+                self.acc_value += self.gross_utility
+                self.acc_spending += self.spending
 
     def update(self, iteration, plot=False, figsize=(8,5), fontsize=14):
         # Gather relevant logs
@@ -84,14 +113,22 @@ class Agent:
         bids = np.array(list(opp.bid for opp in self.logs))
         prices = np.array(list(opp.price for opp in self.logs))
         outcomes = np.array(list(opp.outcome for opp in self.logs))
+        sum_values = np.sum(np.array(list(opp.outcome * opp.value for opp in self.logs)))
         estimated_CTRs = np.array(list(opp.estimated_CTR for opp in self.logs))
 
         # Update response model with data from winning bids
         won_mask = np.array(list(opp.won for opp in self.logs))
         self.allocator.update(contexts[won_mask], items[won_mask], outcomes[won_mask], iteration, plot, figsize, fontsize, self.name)
 
+        #self.result_cache.append([contexts, values, bids, prices, outcomes, estimated_CTRs, won_mask, iteration, plot, figsize, fontsize, self.name])
+        self.result_cache.append([contexts, values, bids, prices, sum_values, estimated_CTRs, np.sum(won_mask), iteration, plot, figsize, fontsize, self.name])
         # Update bidding model with all data
-        self.bidder.update(contexts, values, bids, prices, outcomes, estimated_CTRs, won_mask, iteration, plot, figsize, fontsize, self.name)
+        # self.bidder.update(contexts, values, bids, prices, outcomes, estimated_CTRs, won_mask, iteration, plot, figsize, fontsize, self.name)
+        if len(self.result_cache) > self.postback_delay:
+            self.bidder.update(*self.result_cache[-self.postback_delay-1])
+        else:
+            self.bidder.update(None, None, None, None, None, None, None, None, plot, figsize, fontsize, self.name)
+
 
     def get_allocation_regret(self):
         ''' How much value am I missing out on due to suboptimal allocation? '''
@@ -120,6 +157,7 @@ class Agent:
     def clear_utility(self):
         self.net_utility = .0
         self.gross_utility = .0
+        self.spending = .0
 
     def clear_logs(self):
         if not self.memory:
@@ -127,4 +165,7 @@ class Agent:
         else:
             self.logs = self.logs[-self.memory:]
         self.bidder.clear_logs(memory=self.memory)
+
+    def reset_run(self):
+        self.result_cache = []
 

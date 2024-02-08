@@ -84,7 +84,8 @@ def instantiate_agents(rng, agent_configs, agents2item_values, agents2items):
               item_values=agents2item_values[agent_config['name']],
               allocator=eval(f"{agent_config['allocator']['type']}(rng=rng{parse_kwargs(agent_config['allocator']['kwargs'])})"),
               bidder=eval(f"{agent_config['bidder']['type']}(rng=rng{parse_kwargs(agent_config['bidder']['kwargs'])})"),
-              memory=(0 if 'memory' not in agent_config.keys() else agent_config['memory']))
+              memory=(0 if 'memory' not in agent_config.keys() else agent_config['memory']),
+              postback_delay=int(agent_config.get('postback_delay', 0)))
         for agent_config in agent_configs
     ]
 
@@ -110,6 +111,7 @@ def instantiate_auction(rng, config, agents2items, agents2item_values, agents, m
 
 
 def simulation_run():
+
     for i in range(num_iter):
         print(f'==== ITERATION {i} ====')
 
@@ -120,7 +122,26 @@ def simulation_run():
         net_utilities = [agent.net_utility for agent in auction.agents]
         gross_utilities = [agent.gross_utility for agent in auction.agents]
 
-        result = pd.DataFrame({'Name': names, 'Net': net_utilities, 'Gross': gross_utilities})
+        for agent in auction.agents:
+            agent.calc_perf_group()
+        acc_value = [agent.acc_value for agent in auction.agents]
+        acc_spending = [agent.acc_spending for agent in auction.agents]
+        under_value = [agent.under_value for agent in auction.agents]
+        under_spending = [agent.under_spending for agent in auction.agents]
+        violation_value = [agent.violation_value for agent in auction.agents]
+        violation_spending = [agent.violation_spending for agent in auction.agents]
+
+        result = pd.DataFrame({
+            'Name': names,
+            'Net': net_utilities,
+            'Gross': gross_utilities,
+            'Acc': acc_value,
+            'Under': under_value,
+            'Violation': violation_value,
+            'Acc Spend': acc_spending,
+            'Under Spend': under_spending,
+            'Violation Spend': violation_spending,
+            })
 
         print(result)
         print(f'\tAuction revenue: \t {auction.revenue}')
@@ -136,13 +157,11 @@ def simulation_run():
             agent2overbid_regret[agent.name].append(agent.get_overbid_regret())
             agent2underbid_regret[agent.name].append(agent.get_underbid_regret())
 
-            agent2CTR_RMSE[agent.name].append(agent.get_CTR_RMSE())
-            agent2CTR_bias[agent.name].append(agent.get_CTR_bias())
+            #agent2CTR_RMSE[agent.name].append(agent.get_CTR_RMSE())
+            #agent2CTR_bias[agent.name].append(agent.get_CTR_bias())
 
-            if isinstance(agent.bidder, PolicyLearningBidder) or isinstance(agent.bidder, DoublyRobustBidder):
-                agent2gamma[agent.name].append(torch.mean(torch.Tensor(agent.bidder.gammas)).detach().item())
-            elif not agent.bidder.truthful:
-                agent2gamma[agent.name].append(np.mean(agent.bidder.gammas))
+            #if not agent.bidder.truthful:
+            #    agent2gamma[agent.name].append(np.mean(agent.bidder.gammas))
 
             best_expected_value = np.mean([opp.best_expected_value for opp in agent.logs])
             agent2best_expected_value[agent.name].append(best_expected_value)
@@ -153,6 +172,9 @@ def simulation_run():
 
         auction_revenue.append(auction.revenue)
         auction.clear_revenue()
+        
+    for agent_id, agent in enumerate(auction.agents):
+        agent.reset_run()
 
 if __name__ == '__main__':
     # Parse commandline arguments
@@ -176,8 +198,8 @@ if __name__ == '__main__':
     run2agent2underbid_regret = {}
     run2agent2best_expected_value = {}
 
-    run2agent2CTR_RMSE = {}
-    run2agent2CTR_bias = {}
+    #run2agent2CTR_RMSE = {}
+    #run2agent2CTR_bias = {}
     run2agent2gamma = {}
 
     run2auction_revenue = {}
@@ -215,8 +237,8 @@ if __name__ == '__main__':
         run2agent2underbid_regret[run] = agent2underbid_regret
         run2agent2best_expected_value[run] = agent2best_expected_value
 
-        run2agent2CTR_RMSE[run] = agent2CTR_RMSE
-        run2agent2CTR_bias[run] = agent2CTR_bias
+        #run2agent2CTR_RMSE[run] = agent2CTR_RMSE
+        #run2agent2CTR_bias[run] = agent2CTR_bias
         run2agent2gamma[run] = agent2gamma
 
         run2auction_revenue[run] = auction_revenue
@@ -288,8 +310,8 @@ if __name__ == '__main__':
     underbid_regret_df = plot_measure_per_agent(run2agent2underbid_regret, 'Underbid Regret')
     underbid_regret_df.to_csv(f'{output_dir}/underbid_regret_{rounds_per_iter}_rounds_{num_iter}_iters_{num_runs}_runs_{obs_embedding_size}_emb_of_{embedding_size}.csv', index=False)
 
-    plot_measure_per_agent(run2agent2CTR_RMSE, 'CTR RMSE', log_y=True)
-    plot_measure_per_agent(run2agent2CTR_bias, 'CTR Bias', optimal=1.0) #, yrange=(.5, 5.0))
+    #plot_measure_per_agent(run2agent2CTR_RMSE, 'CTR RMSE', log_y=True)
+    #plot_measure_per_agent(run2agent2CTR_bias, 'CTR Bias', optimal=1.0) #, yrange=(.5, 5.0))
 
     shading_factor_df = plot_measure_per_agent(run2agent2gamma, 'Shading Factors')
 

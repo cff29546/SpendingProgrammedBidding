@@ -84,13 +84,15 @@ class OracleAllocator(Allocator):
 class IsotonicPerturbationOracleAllocator(Allocator):
     """ An allocator that acts based on the true P(click) with simulated isotonic perturbation"""
 
-    def __init__(self, rng, diff_range, diff_step):
+    def __init__(self, rng, diff_range_min, diff_range_max, diff_step):
         self.item_embeddings = None
-        self.diff_range = np.abs(diff_range)
+        self.diff_range_min = diff_range_min
+        self.diff_range_max = diff_range_max
         self.diff_step = diff_step
-        self.diff = 0
-        self.diff = np.minimum(np.maximum(rng.normal(0.0, self.diff_step, size=(1,))[0] + self.diff, -self.diff_range), self.diff_range)
+        self.diff = 1.0
         super(IsotonicPerturbationOracleAllocator, self).__init__(rng)
+        self.diff = np.minimum(np.maximum(self.rng.normal(0.0, self.diff_step, size=(1,))[0] + self.diff, self.diff_range_min), self.diff_range_max)
+        print('diff ', self.diff)
 
     def update_item_embeddings(self, item_embeddings):
         self.item_embeddings = item_embeddings
@@ -99,5 +101,6 @@ class IsotonicPerturbationOracleAllocator(Allocator):
         return sigmoid(self.item_embeddings @ context) * self.diff
 
     def update(self, contexts, items, outcomes, iteration, plot, figsize, fontsize, name):
-        self.diff = np.minimum(np.maximum(self.rng.normal(0.0, self.diff_step, size=(1,))[0] + self.diff, -self.diff_range), self.diff_range)
+        self.diff = np.minimum(np.maximum(self.rng.normal(0.0, self.diff_step, size=(1,))[0] + self.diff, self.diff_range_min), self.diff_range_max)
+        print('diff ', self.diff)
 

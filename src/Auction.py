@@ -24,8 +24,10 @@ class Auction:
         self.obs_embedding_size = obs_embedding_size
 
         self.num_participants_per_round = num_participants_per_round
+        self.round = 0
 
     def simulate_opportunity(self):
+        self.round += 1
         # Sample the number of slots uniformly between [1, max_slots]
         num_slots = self.rng.integers(1, self.max_slots + 1)
 
@@ -68,10 +70,11 @@ class Auction:
         for slot_id, (winner, price, second_price, outcome) in enumerate(zip(winners, prices, second_prices, outcomes)):
             for agent_id, agent in enumerate(participating_agents):
                 if agent_id == winner:
-                    agent.charge(price, second_price, bool(outcome))
+                    agent.charge(price, second_price, bool(outcome), self.round)
                 else:
-                    agent.set_price(price)
+                    agent.set_price(price, self.round)
             self.revenue += price
 
     def clear_revenue(self):
         self.revenue = 0.0
+        self.round = 0
