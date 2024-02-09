@@ -46,7 +46,7 @@ class BudgetRistrictedBidder(Bidder):
         self.spending += price
 
     def update(self, contexts, values, bids, prices, outcomes, estimated_CTRs, won_mask, iteration, plot, figsize, fontsize, name):
-        print('update {}'.format(contexts is None))
+        #print('update {}'.format(contexts is None))
         self.spending = 0
 
 
@@ -149,3 +149,12 @@ class IMPCBudgetBidder(BudgetRistrictedBidder):
     def update(self, contexts, values, bids, prices, outcomes, estimated_CTRs, won_mask, iteration, plot, figsize, fontsize, name):
         print('update {}'.format(contexts is None))
         self.spending = 0
+
+
+class BidCapBidder(IMPCBudgetBidder):
+    """ IMPC Budget pacing bidder """
+    def charge(self, price, cur_round):
+        super(BidCapBidder, self).charge(price, cur_round)
+        if self.roi_bid > 1.0:
+            self.roi_bid = 1.0
+

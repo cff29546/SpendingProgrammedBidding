@@ -10,7 +10,7 @@
   "allocation": "SecondPrice",
   "agents": [
     {
-    "name": "Truthful Oracle",
+    "name": "Environment",
     "num_copies": 1,
     "num_items": 12,
       "allocator": {
@@ -23,7 +23,7 @@
       }
     },
     {
-    "name": "Truthful Budget",
+    "name": "IMPC Bidder",
     "num_copies": 1,
     "num_items": 1,
     "postback_delay": 1,
@@ -32,10 +32,10 @@
         "kwargs": {"diff_range_min": 0.5, "diff_range_max": 2.0, "diff_step": 0.1}
       },
       "bidder": {
-        "type": "TruthfulBudgetRistricctedBidder",
-        "kwargs": {"budget": 3000, "rounds_per_iter": 10000}
+        "type": "IMPCBudgetBidder",
+        "kwargs": {"budget": 3000, "rounds_per_iter": 10000, "rounds_per_step": 100, "bid_step": 0.01, "memory": 10}
       }
     }
   ],
-  "output_dir": "results/SP_SPB/"
+  "output_dir": "results/impc/"
 }
