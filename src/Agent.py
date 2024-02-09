@@ -71,19 +71,19 @@ class Agent:
 
         return bid, best_item
 
-    def charge(self, price, second_price, outcome, round):
+    def charge(self, price, second_price, outcome, cur_round):
         self.logs[-1].set_price_outcome(price, second_price, outcome, won=True)
         last_value = self.logs[-1].value * outcome
         self.net_utility += (last_value - price)
         self.gross_utility += last_value
         self.spending += price
         if hasattr(self.bidder, 'charge'):
-            self.bidder.charge(price, round)
+            self.bidder.charge(price, cur_round)
 
-    def set_price(self, price, round):
+    def set_price(self, price, cur_round):
         self.logs[-1].set_price(price)
         if hasattr(self.bidder, 'charge'):
-            self.bidder.charge(0, round)
+            self.bidder.charge(0, cur_round)
 
     def calc_perf_group(self):
         self.acc_value = .0
@@ -121,7 +121,7 @@ class Agent:
         self.allocator.update(contexts[won_mask], items[won_mask], outcomes[won_mask], iteration, plot, figsize, fontsize, self.name)
 
         #self.result_cache.append([contexts, values, bids, prices, outcomes, estimated_CTRs, won_mask, iteration, plot, figsize, fontsize, self.name])
-        self.result_cache.append([contexts, values, bids, prices, sum_values, estimated_CTRs, np.sum(won_mask), iteration, plot, figsize, fontsize, self.name])
+        self.result_cache.append([contexts, values, bids, prices, sum_values, estimated_CTRs, won_mask, iteration, plot, figsize, fontsize, self.name])
         # Update bidding model with all data
         # self.bidder.update(contexts, values, bids, prices, outcomes, estimated_CTRs, won_mask, iteration, plot, figsize, fontsize, self.name)
         if len(self.result_cache) > self.postback_delay:
@@ -168,4 +168,5 @@ class Agent:
 
     def reset_run(self):
         self.result_cache = []
-
+        if hasattr(self.bidder, 'reset'):
+            self.bidder.reset()

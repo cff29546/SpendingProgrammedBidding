@@ -92,7 +92,7 @@ class IsotonicPerturbationOracleAllocator(Allocator):
         self.diff = 1.0
         super(IsotonicPerturbationOracleAllocator, self).__init__(rng)
         self.diff = np.minimum(np.maximum(self.rng.normal(0.0, self.diff_step, size=(1,))[0] + self.diff, self.diff_range_min), self.diff_range_max)
-        print('diff ', self.diff)
+        #print('diff ', self.diff)
 
     def update_item_embeddings(self, item_embeddings):
         self.item_embeddings = item_embeddings
@@ -102,5 +102,5 @@ class IsotonicPerturbationOracleAllocator(Allocator):
 
     def update(self, contexts, items, outcomes, iteration, plot, figsize, fontsize, name):
         self.diff = np.minimum(np.maximum(self.rng.normal(0.0, self.diff_step, size=(1,))[0] + self.diff, self.diff_range_min), self.diff_range_max)
-        print('diff ', self.diff)
+        #print('diff ', self.diff)
 

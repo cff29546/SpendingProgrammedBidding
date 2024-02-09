@@ -2,6 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import scipy.stats
 import torch
+from scipy import optimize
 
 from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import RBF
@@ -46,7 +47,6 @@ class BudgetRistrictedBidder(Bidder):
         self.spending += price
 
     def update(self, contexts, values, bids, prices, outcomes, estimated_CTRs, won_mask, iteration, plot, figsize, fontsize, name):
-        #print('update {}'.format(contexts is None))
         self.spending = 0
 
 
@@ -124,7 +124,8 @@ class IMPCBudgetBidder(BudgetRistrictedBidder):
     """ IMPC Budget pacing bidder """
     def __init__(self, rng, budget, rounds_per_iter, rounds_per_step, bid_step, memory):
         super(IMPCBudgetBidder, self).__init__(rng, budget, rounds_per_iter)
-        self.round_per_step = rounds_per_step
+        self.rounds_per_step = rounds_per_step
+        self.rounds_per_iter = rounds_per_iter
         self.target_step_spending = budget * rounds_per_step / rounds_per_iter
         self.bid2spend_history = []
         self.bid_step = bid_step
@@ -135,11 +136,14 @@ class IMPCBudgetBidder(BudgetRistrictedBidder):
     def charge(self, price, cur_round):
         self.spending += price
         self.step_spending += price
-        if cur_round % self.round_per_step == 0:
+        if cur_round % self.rounds_per_step == 0:
             self.bid2spend_history.append([self.roi_bid, self.step_spending])
+            if self.step_spending < 1e-6:
+                self.roi_bid += self.bid_step
+            else:
+                bid = impc(self.bid2spend_history, self.target_step_spending)
+                self.roi_bid = np.minimum(np.maximum(bid, self.roi_bid - self.bid_step), self.roi_bid + self.bid_step)
             self.step_spending = 0
-            bid = impc(self.bid2spend_history, self.target_step_spending)
-            self.roi_bid = np.minimum(np.maximum(bid, self.roi_bid - self.bid_step), self.roi_bid + self.bid_step)
         self.bid2spend_history = self.bid2spend_history[-self.memory:]
 
     def bid(self, value, context, estimated_CTR):
@@ -147,14 +151,77 @@ class IMPCBudgetBidder(BudgetRistrictedBidder):
             return value * estimated_CTR * self.roi_bid
 
     def update(self, contexts, values, bids, prices, outcomes, estimated_CTRs, won_mask, iteration, plot, figsize, fontsize, name):
-        print('update {}'.format(contexts is None))
         self.spending = 0
+
+    def reset(self):
+        self.bid2spend_history = []
+        self.spending = 0
+        self.roi_bid = 1.0
 
 
 class BidCapBidder(IMPCBudgetBidder):
-    """ IMPC Budget pacing bidder """
+    """ Bid cap bidder """
     def charge(self, price, cur_round):
         super(BidCapBidder, self).charge(price, cur_round)
-        if self.roi_bid > 1.0:
-            self.roi_bid = 1.0
+        self.roi_bid = np.minimum(self.roi_bid, 1.0)
+
+def spend2value(spend, a, b):
+    return (np.sqrt(b * b + 2 * a * spend) - b) / a
+
+def opt_spend(a, b):
+    return (2.0 - 2.0 * b) / a
+
+def fitf(func, args, bounds, datax, datay):
+    ret = optimize.curve_fit(func, datax, datay, args, bounds=bounds, maxfev=1000)
+    args, _ = ret
+    return args
+
+def fit_model(spend, value):
+    args = [1, 1]
+    bounds = ([0, 0], [np.inf, np.inf])
+    try:
+        args = fitf(spend2value, args, bounds, spend, value)
+        return True, args[0], args[1]
+    except Exception as e:
+        print(e)
+        return False, 1, 1
+
+class SPBBidder(IMPCBudgetBidder):
+    """ spb bidder """
+    def __init__(self, rng, budget, rounds_per_iter, rounds_per_step, bid_step, memory, spb_memory, explore_budget):
+        super(SPBBidder, self).__init__(rng, budget, rounds_per_iter, rounds_per_step, bid_step, memory)
+        self.spb_memory = spb_memory
+        self.explore_budget = explore_budget
+        self.optimal_budget = -1
+        self.spend_history = []
+        self.value_history = []
+
+    def charge(self, price, cur_round):
+        if self.optimal_budget > 0:
+            self.target_step_spending = self.optimal_budget * self.rounds_per_step / self.rounds_per_iter
+        super(SPBBidder, self).charge(price, cur_round)
+        if self.optimal_budget <= 0:
+            self.roi_bid = np.minimum(self.roi_bid, 1.0)
+
+    def update(self, contexts, values, bids, prices, sum_values, estimated_CTRs, won_mask, iteration, plot, figsize, fontsize, name):
+        if contexts is not None:
+            self.spend_history.append(np.sum(prices[won_mask]))
+            self.spend_history=self.spend_history[-self.spb_memory:]
+            self.value_history.append(sum_values)
+            self.value_history=self.value_history[-self.spb_memory:]
+        model_ready, a, b = False, 1, 1
+        if len(self.spend_history) > 1:
+            model_ready, a, b = fit_model(self.spend_history, self.value_history)
+        print("spb model: ", model_ready, a, b, self.optimal_budget, self.spend_history, self.value_history)
+        if model_ready:
+            self.optimal_budget = np.minimum(np.maximum(opt_spend(a, b), self.explore_budget), self.budget)
+        else:
+            self.optimal_budget = -1
+        self.spending = 0
+
+    def reset(self):
+        super(SPBBidder, self).reset()
+        self.optimal_budget = -1
+        self.spend_history = []
+        self.value_history = []
 
