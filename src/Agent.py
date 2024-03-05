@@ -78,12 +78,12 @@ class Agent:
         self.gross_utility += last_value
         self.spending += price
         if hasattr(self.bidder, 'charge'):
-            self.bidder.charge(price, cur_round)
+            self.bidder.charge(price, cur_round, self.logs[-1].estimated_CTR, self.logs[-1].value)
 
     def set_price(self, price, cur_round):
         self.logs[-1].set_price(price)
         if hasattr(self.bidder, 'charge'):
-            self.bidder.charge(0, cur_round)
+            self.bidder.charge(0, cur_round, 0, 0)
 
     def calc_perf_group(self):
         self.acc_value = .0

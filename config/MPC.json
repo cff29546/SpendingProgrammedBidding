@@ -1,0 +1,52 @@
+{
+  "random_seed": 0,
+  "num_runs": 3,
+  "num_iter" : 20,
+  "rounds_per_iter": 10000,
+  "num_participants_per_round": 2,
+  "embedding_size": 5,
+  "embedding_var": 1.0,
+  "obs_embedding_size": 4,
+  "allocation": "SecondPrice",
+  "agents": [
+    {
+    "name": "Environment",
+    "num_copies": 1,
+    "num_items": 12,
+      "allocator": {
+        "type": "OracleAllocator",
+        "kwargs": {}
+      },
+      "bidder": {
+        "type": "TruthfulBidder",
+        "kwargs": {}
+      }
+    },
+    {
+    "name": "MPC Bidder",
+    "num_copies": 1,
+    "num_items": 1,
+    "postback_delay": 1,
+      "allocator": {
+        "type": "IsotonicPerturbationOracleAllocator",
+        "kwargs": {"diff_range_min": 0.5, "diff_range_max": 2.0, "diff_step": 0.1}
+      },
+      "bidder": {
+        "type": "MPCBidder",
+        "kwargs": {
+            "budget": 3000,
+            "rounds_per_iter": 10000,
+            "rounds_per_step": 100,
+            "bid_step": 0.01,
+            "kp": 0.2,
+            "ki": 0,
+            "kd": 0.2,
+            "bid_min": 0.5,
+            "bid_max": 5.0,
+            "memory": 1
+        }
+      }
+    }
+  ],
+  "output_dir": "results/mpc/"
+}

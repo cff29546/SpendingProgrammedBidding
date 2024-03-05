@@ -43,7 +43,7 @@ class BudgetRistrictedBidder(Bidder):
         self.budget = budget
         self.spending = 0
 
-    def charge(self, price, round):
+    def charge(self, price, round, estimated_CTR, value):
         self.spending += price
 
     def update(self, contexts, values, bids, prices, outcomes, estimated_CTRs, won_mask, iteration, plot, figsize, fontsize, name):
@@ -133,7 +133,7 @@ class IMPCBudgetBidder(BudgetRistrictedBidder):
         self.step_spending = 0
         self.memory = memory
 
-    def charge(self, price, cur_round):
+    def charge(self, price, cur_round, estimated_CTR, vlaue):
         self.spending += price
         self.step_spending += price
         if cur_round % self.rounds_per_step == 0:
@@ -149,6 +149,7 @@ class IMPCBudgetBidder(BudgetRistrictedBidder):
     def bid(self, value, context, estimated_CTR):
         if self.spending < self.budget:
             return value * estimated_CTR * self.roi_bid
+        return 0
 
     def update(self, contexts, values, bids, prices, outcomes, estimated_CTRs, won_mask, iteration, plot, figsize, fontsize, name):
         self.spending = 0
@@ -161,8 +162,8 @@ class IMPCBudgetBidder(BudgetRistrictedBidder):
 
 class BidCapBidder(IMPCBudgetBidder):
     """ Bid cap bidder """
-    def charge(self, price, cur_round):
-        super(BidCapBidder, self).charge(price, cur_round)
+    def charge(self, price, cur_round, estimated_CTR, value):
+        super(BidCapBidder, self).charge(price, cur_round, estimated_CTR, value)
         self.roi_bid = np.minimum(self.roi_bid, 1.0)
 
 def spend2value(spend, a, b):
@@ -196,10 +197,10 @@ class SPBBidder(IMPCBudgetBidder):
         self.spend_history = []
         self.value_history = []
 
-    def charge(self, price, cur_round):
+    def charge(self, price, cur_round, estimated_CTR, value):
         if self.optimal_budget > 0:
             self.target_step_spending = self.optimal_budget * self.rounds_per_step / self.rounds_per_iter
-        super(SPBBidder, self).charge(price, cur_round)
+        super(SPBBidder, self).charge(price, cur_round, estimated_CTR, value)
         if self.optimal_budget <= 0:
             self.roi_bid = np.minimum(self.roi_bid, 1.0)
 
@@ -224,4 +225,84 @@ class SPBBidder(IMPCBudgetBidder):
         self.optimal_budget = -1
         self.spend_history = []
         self.value_history = []
+
+class MPCBidder(BudgetRistrictedBidder):
+    def __init__(self, rng, budget, rounds_per_iter, rounds_per_step, bid_step, memory, kp, ki, kd, bid_min, bid_max):
+        super(MPCBidder, self).__init__(rng, budget, rounds_per_iter)
+        self.rounds_per_step = rounds_per_step
+        self.rounds_per_iter = rounds_per_iter
+        self.bid_step = bid_step
+        self.roi_bid = 1.0
+        self.prediction_diff = 1.0
+        self.estimated_value = 0
+        self.memory = memory
+        self.value_history = []
+        self.estimated_value_history = []
+        self.bid_min = bid_min
+        self.bid_max = bid_max
+
+        self.kp = kp
+        self.ki = ki
+        self.kd = kd
+
+        self.error_p = 0
+        self.last_error_p = 0
+        self.error_i = 0
+        self.error_d = 0
+
+    def charge(self, price, cur_round, estimated_CTR, value):
+        if price > 0 :
+            self.spending += price
+            self.estimated_value += estimated_CTR * value
+
+        # adjust roi_bid (pid with roi)
+        if cur_round % self.rounds_per_step == 0:
+            roi_target = 1.0
+            value = self.estimated_value * self.prediction_diff
+            if self.spending > 0 and value > 0:
+                value = self.estimated_value * self.prediction_diff
+                roi = value / self.spending
+                self.error_p = roi - roi_target
+                self.error_i += self.error_p
+                self.error_d = self.error_p - self.last_error_p
+                self.last_error_p = self.error_p
+
+                control = self.kp * self.error_p + self.ki * self.error_i + self.kd * self.error_d
+
+                bid = self.roi_bid + control
+                self.roi_bid = np.minimum(np.maximum(bid, self.roi_bid - self.bid_step), self.roi_bid + self.bid_step)
+                self.roi_bid = np.minimum(np.maximum(self.roi_bid, self.bid_min), self.bid_max)
+            else:
+                self.roi_bid = np.minimum(self.bid_max, self.roi_bid + self.bid_step)
+
+    def bid(self, value, context, estimated_CTR):
+        if self.spending < self.budget:
+            return value * estimated_CTR * self.roi_bid
+        return 0
+
+    def update(self, contexts, values, bids, prices, sum_values, estimated_CTRs, won_mask, iteration, plot, figsize, fontsize, name):
+        self.spending = 0
+        self.estimated_value = 0
+        if contexts is not None:
+            self.estimated_value_history.append(np.sum(np.multiply(estimated_CTRs, values)[won_mask]))
+            self.estimated_value_history=self.estimated_value_history[-self.memory:]
+            self.value_history.append(sum_values)
+            self.value_history=self.value_history[-self.memory:]
+            value = sum(self.value_history)
+            estimated_value = sum(self.estimated_value_history)
+            if value > 1 and estimated_value > 1:
+                self.prediction_diff = value / estimated_value
+            else:
+                self.prediction_diff = 1.0
+            print(f"bid={self.roi_bid} diff={self.prediction_diff} e={estimated_value} v={value}")
+
+    #def reset(self):
+
+        #self.estimated_value = 0
+        #self.roi_bid = 1.0
+
+        #self.error_p = 0
+        #self.last_error_p = 0
+        #self.error_i = 0
+        #self.error_d = 0
 
