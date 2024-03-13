@@ -59,7 +59,8 @@ def rerandom(rng, config):
         if 'num_copies' in agent_config.keys():
             for i in range(1, agent_config['num_copies'] + 1):
                 agent_config_copy = deepcopy(agent_config)
-                agent_config_copy['name'] += f' {num_agents + 1}'
+                if config.get('use_agent_seq_num', False):
+                    agent_config_copy['name'] += f' {num_agents + 1}'
                 agent_configs.append(agent_config_copy)
                 num_agents += 1
         else:
@@ -336,6 +337,8 @@ if __name__ == '__main__':
                 df_rows[group + ' Spending Rate'].append(group_spending[group] / max(group_spending['Total'], 1))
 
     df = pd.DataFrame(df_rows)
+    df.to_csv(f'{output_dir}/value_spend.csv')
+
     e1_rows = {'Agent': [], 'e1': [], 'Violation Value Rate': []}
     for name in agent2e1value:
         total = agent2e1value[name].get('Total', 0.0)
@@ -345,6 +348,8 @@ if __name__ == '__main__':
             e1_rows['e1'].append(float(e1))
             e1_rows['Violation Value Rate'].append(value/total if total > 0 else 0)
     e1df = pd.DataFrame(e1_rows)
+    e1df.to_csv(f'{output_dir}/e1.csv')
+
     roi_rows = {'Agent': [], 'Roi vs Target Roi': [], 'Value Rate': []}
     for name in agent2roi2value:
         total = agent2roi2value[name].get('Total', 0.0)
@@ -354,6 +359,8 @@ if __name__ == '__main__':
             roi_rows['Roi vs Target Roi'].append(float(roi))
             roi_rows['Value Rate'].append(value/total if total > 0 else 0)
     roidf = pd.DataFrame(roi_rows)
+    roidf.to_csv(f'{output_dir}/roi.csv')
+
 
     def plot_measure_over_dim(df, measure_name, dim, cumulative=False, log_y=False, yrange=None, optimal=None):
         fig, axes = plt.subplots(figsize=FIGSIZE)
