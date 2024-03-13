@@ -41,6 +41,17 @@ def parse_config(path):
     embedding_var = config['embedding_var']
     obs_embedding_size = config['obs_embedding_size']
 
+    agent_configs, agents2items, agents2item_values = rerandom(rng, config)
+
+    return rng, config, agent_configs, agents2items, agents2item_values, num_runs, max_slots, embedding_size, embedding_var, obs_embedding_size
+
+
+def rerandom(rng, config):
+    # Technical parameters for distribution of latent embeddings
+    embedding_size = config['embedding_size']
+    embedding_var = config['embedding_var']
+    obs_embedding_size = config['obs_embedding_size']
+
     # Expand agent-config if there are multiple copies
     agent_configs = []
     num_agents = 0
@@ -71,7 +82,7 @@ def parse_config(path):
     for agent, items in agents2items.items():
         agents2items[agent] = np.hstack((items, - 3.0 - 1.0 * rng.random((items.shape[0], 1))))
 
-    return rng, config, agent_configs, agents2items, agents2item_values, num_runs, max_slots, embedding_size, embedding_var, obs_embedding_size
+    return agent_configs, agents2items, agents2item_values
 
 
 def instantiate_agents(rng, agent_configs, agents2item_values, agents2items):
@@ -133,8 +144,8 @@ def simulation_run():
 
         result = pd.DataFrame({
             'Name': names,
-            'Net': net_utilities,
-            'Gross': gross_utilities,
+            #'Net': net_utilities,
+            #'Gross': gross_utilities,
             'Acc': acc_value,
             'Under': under_value,
             'Violation': violation_value,
@@ -144,13 +155,16 @@ def simulation_run():
             })
 
         print(result)
-        print(f'\tAuction revenue: \t {auction.revenue}')
+        #print(f'\tAuction revenue: \t {auction.revenue}')
 
         for agent_id, agent in enumerate(auction.agents):
             agent.update(iteration=i, plot=True, figsize=FIGSIZE, fontsize=FONTSIZE)
 
             agent2net_utility[agent.name].append(agent.net_utility)
             agent2gross_utility[agent.name].append(agent.gross_utility)
+            
+            agent2spending[agent.name].append(agent.spending)
+            agent2budget[agent.name].append(agent.budget)
 
             agent2allocation_regret[agent.name].append(agent.get_allocation_regret())
             agent2estimation_regret[agent.name].append(agent.get_estimation_regret())
@@ -163,10 +177,10 @@ def simulation_run():
             #if not agent.bidder.truthful:
             #    agent2gamma[agent.name].append(np.mean(agent.bidder.gammas))
 
-            best_expected_value = np.mean([opp.best_expected_value for opp in agent.logs])
-            agent2best_expected_value[agent.name].append(best_expected_value)
+            #best_expected_value = np.mean([opp.best_expected_value for opp in agent.logs])
+            #agent2best_expected_value[agent.name].append(best_expected_value)
 
-            print('Average Best Value for Agent: ', best_expected_value)
+            #print('Average Best Value for Agent: ', best_expected_value)
             agent.clear_utility()
             agent.clear_logs()
 
@@ -197,6 +211,9 @@ if __name__ == '__main__':
     run2agent2overbid_regret = {}
     run2agent2underbid_regret = {}
     run2agent2best_expected_value = {}
+    
+    run2agent2spending = {}
+    run2agent2budget = {}
 
     #run2agent2CTR_RMSE = {}
     #run2agent2CTR_bias = {}
@@ -206,6 +223,8 @@ if __name__ == '__main__':
 
     # Repeated runs
     for run in range(num_runs):
+        # Rerandomize campaign
+        agent_configs, agents2items, agents2item_values = rerandom(rng, config)
         # Reinstantiate agents and auction per run
         agents = instantiate_agents(rng, agent_configs, agents2item_values, agents2items)
         auction, num_iter, rounds_per_iter, output_dir = instantiate_auction(rng, config, agents2items, agents2item_values, agents, max_slots, embedding_size, embedding_var, obs_embedding_size)
@@ -218,6 +237,9 @@ if __name__ == '__main__':
         agent2overbid_regret = defaultdict(list)
         agent2underbid_regret = defaultdict(list)
         agent2best_expected_value = defaultdict(list)
+
+        agent2spending = defaultdict(list)
+        agent2budget = defaultdict(list)
 
         agent2CTR_RMSE = defaultdict(list)
         agent2CTR_bias = defaultdict(list)
@@ -237,6 +259,9 @@ if __name__ == '__main__':
         run2agent2underbid_regret[run] = agent2underbid_regret
         run2agent2best_expected_value[run] = agent2best_expected_value
 
+        run2agent2spending[run] = agent2spending
+        run2agent2budget[run] = agent2budget
+
         #run2agent2CTR_RMSE[run] = agent2CTR_RMSE
         #run2agent2CTR_bias[run] = agent2CTR_bias
         run2agent2gamma[run] = agent2gamma
@@ -247,28 +272,94 @@ if __name__ == '__main__':
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
-    def measure_per_agent2df(run2agent2measure, measure_name):
-        df_rows = {'Run': [], 'Agent': [], 'Iteration': [], measure_name: []}
-        for run, agent2measure in run2agent2measure.items():
-            for agent, measures in agent2measure.items():
-                for iteration, measure in enumerate(measures):
-                    df_rows['Run'].append(run)
-                    df_rows['Agent'].append(agent)
-                    df_rows['Iteration'].append(iteration)
-                    df_rows[measure_name].append(measure)
-        return pd.DataFrame(df_rows)
+    def perf_group(value, spending, budget, e1, e2, e3):
+        target = 1.0
+        if spending > 0 and budget > 0:
+            roi_vs_target = value / spending / target
+            if roi_vs_target < (1.0 - e1):
+                return 'Violation'
+            elif spending < budget * (1.0 - e3) and roi_vs_target > (1.0 + e2):
+                return 'Under Performance'
+            else:
+                return 'Accomplish'
+        return None
 
-    def plot_measure_per_agent(run2agent2measure, measure_name, cumulative=False, log_y=False, yrange=None, optimal=None):
-        # Generate DataFrame for Seaborn
-        if type(run2agent2measure) != pd.DataFrame:
-            df = measure_per_agent2df(run2agent2measure, measure_name)
-        else:
-            df = run2agent2measure
+    def roi_level(value, spending, cap):
+        target = 1.0
+        if spending > 0:
+            roi_vs_target = value / spending / target
+            return f'{roi_vs_target if roi_vs_target < cap else cap:.1f}'
+        return f'{cap:.1f}'
+            
 
+    df_rows = {'Run': [], 'Agent': []}
+ 
+    e1_range = [f'{e1/10.0:.1f}' for e1 in range(1,6,1)]
+    roi_range = [f'{r/10.0:.1f}' for r in range(0,26,1)]
+    agent2e1value = {}
+    agent2roi2value = {}
+    for run in range(num_runs):
+        for name in run2agent2gross_utility[run]:
+            if name.startswith("Environment"):
+                continue
+            group_value = {'Total': .0, 'Accomplish': .0, 'Violation': .0, 'Under Performance': .0}
+            agent2e1value[name] = agent2e1value.get(name, {})
+            agent2roi2value[name] = agent2roi2value.get(name, {})
+            group_spending = {'Total': .0, 'Accomplish': .0, 'Violation': .0, 'Under Performance': .0}
+            for value, spending, budget in zip(run2agent2gross_utility[run][name], run2agent2spending[run][name], run2agent2budget[run][name]):
+                group = perf_group(value, spending, budget, 0.2, 0.2, 0.1)
+                if group:
+                    group_value[group] += value
+                    group_value['Total'] += value
+                    group_spending[group] += spending
+                    group_spending['Total'] += spending
+
+                agent2e1value[name]['Total'] = agent2e1value[name].get('Total', 0.0) + value
+                agent2roi2value[name]['Total'] = agent2roi2value[name].get('Total', 0.0) + value
+                for e1 in e1_range:
+                    group = perf_group(value, spending, budget, float(e1), 0.2, 0.1)
+                    if group == 'Violation':
+                        agent2e1value[name][e1] = agent2e1value[name].get(e1, 0.0) + value
+                roi = roi_level(value, spending, 2.5)
+                agent2roi2value[name][roi] = agent2roi2value[name].get(roi, 0.0) + value
+
+            df_rows['Run'].append(run)
+            df_rows['Agent'].append(name)
+            for group, value in group_value.items():
+                df_rows[group + ' Value'] = df_rows.get(group + ' Value', [])
+                df_rows[group + ' Value'].append(value)
+                df_rows[group + ' Value Rate'] = df_rows.get(group + ' Value Rate', [])
+                df_rows[group + ' Value Rate'].append(value / max(group_value['Total'], 1))
+                df_rows[group + ' Spending'] = df_rows.get(group + ' Spending', [])
+                df_rows[group + ' Spending'].append(group_spending[group])
+                df_rows[group + ' Spending Rate'] = df_rows.get(group + ' Spending Rate', [])
+                df_rows[group + ' Spending Rate'].append(group_spending[group] / max(group_spending['Total'], 1))
+
+    df = pd.DataFrame(df_rows)
+    e1_rows = {'Agent': [], 'e1': [], 'Violation Value Rate': []}
+    for name in agent2e1value:
+        total = agent2e1value[name].get('Total', 0.0)
+        for e1 in e1_range:
+            value = agent2e1value[name].get(e1, 0.0)
+            e1_rows['Agent'].append(name)
+            e1_rows['e1'].append(float(e1))
+            e1_rows['Violation Value Rate'].append(value/total if total > 0 else 0)
+    e1df = pd.DataFrame(e1_rows)
+    roi_rows = {'Agent': [], 'Roi vs Target Roi': [], 'Value Rate': []}
+    for name in agent2roi2value:
+        total = agent2roi2value[name].get('Total', 0.0)
+        for roi in roi_range:
+            value = agent2roi2value[name].get(roi, 0.0)
+            roi_rows['Agent'].append(name)
+            roi_rows['Roi vs Target Roi'].append(float(roi))
+            roi_rows['Value Rate'].append(value/total if total > 0 else 0)
+    roidf = pd.DataFrame(roi_rows)
+
+    def plot_measure_over_dim(df, measure_name, dim, cumulative=False, log_y=False, yrange=None, optimal=None):
         fig, axes = plt.subplots(figsize=FIGSIZE)
-        plt.title(f'{measure_name} Over Time', fontsize=FONTSIZE + 2)
+        plt.title(f'{measure_name} Over {dim}', fontsize=FONTSIZE + 2)
         min_measure, max_measure = 0.0, 0.0
-        sns.lineplot(data=df, x="Iteration", y=measure_name, hue="Agent", ax=axes)
+        sns.lineplot(data=df, x=dim, y=measure_name, hue="Agent", ax=axes)
         plt.xticks(fontsize=FONTSIZE - 2)
         plt.ylabel(f'{measure_name}', fontsize=FONTSIZE)
         if optimal is not None:
@@ -285,83 +376,53 @@ if __name__ == '__main__':
         plt.grid(True, 'major', 'y', ls='--', lw=.5, c='k', alpha=.3)
         plt.legend(loc='upper left', bbox_to_anchor=(-.05, -.15), fontsize=FONTSIZE, ncol=3)
         plt.tight_layout()
-        plt.savefig(f"{output_dir}/{measure_name.replace(' ', '_')}_{rounds_per_iter}_rounds_{num_iter}_iters_{num_runs}_runs_{obs_embedding_size}_emb_of_{embedding_size}.pdf", bbox_inches='tight')
+        plt.savefig(f"{output_dir}/{measure_name.replace(' ', '_')}_over_{dim}_{rounds_per_iter}_rounds_{num_iter}_iters_{num_runs}_runs.pdf", bbox_inches='tight')
+        plt.close()
         # plt.show()
         return df
 
-    net_utility_df = plot_measure_per_agent(run2agent2net_utility, 'Net Utility').sort_values(['Agent', 'Run', 'Iteration'])
-    net_utility_df.to_csv(f'{output_dir}/net_utility_{rounds_per_iter}_rounds_{num_iter}_iters_{num_runs}_runs_{obs_embedding_size}_emb_of_{embedding_size}.csv', index=False)
+    plot_measure_over_dim(e1df, 'Violation Value Rate', 'e1')
+    plot_measure_over_dim(roidf, 'Value Rate', 'Roi vs Target Roi')
 
-    net_utility_df['Net Utility (Cumulative)'] = net_utility_df.groupby(['Agent', 'Run'])['Net Utility'].cumsum()
-    plot_measure_per_agent(net_utility_df, 'Net Utility (Cumulative)')
-
-    gross_utility_df = plot_measure_per_agent(run2agent2gross_utility, 'Gross Utility').sort_values(['Agent', 'Run', 'Iteration'])
-    gross_utility_df.to_csv(f'{output_dir}/gross_utility_{rounds_per_iter}_rounds_{num_iter}_iters_{num_runs}_runs_{obs_embedding_size}_emb_of_{embedding_size}.csv', index=False)
-
-    gross_utility_df['Gross Utility (Cumulative)'] = gross_utility_df.groupby(['Agent', 'Run'])['Gross Utility'].cumsum()
-    plot_measure_per_agent(gross_utility_df, 'Gross Utility (Cumulative)')
-
-    plot_measure_per_agent(run2agent2best_expected_value, 'Mean Expected Value for Top Ad')
-
-    plot_measure_per_agent(run2agent2allocation_regret, 'Allocation Regret')
-    plot_measure_per_agent(run2agent2estimation_regret, 'Estimation Regret')
-    overbid_regret_df = plot_measure_per_agent(run2agent2overbid_regret, 'Overbid Regret')
-    overbid_regret_df.to_csv(f'{output_dir}/overbid_regret_{rounds_per_iter}_rounds_{num_iter}_iters_{num_runs}_runs_{obs_embedding_size}_emb_of_{embedding_size}.csv', index=False)
-    underbid_regret_df = plot_measure_per_agent(run2agent2underbid_regret, 'Underbid Regret')
-    underbid_regret_df.to_csv(f'{output_dir}/underbid_regret_{rounds_per_iter}_rounds_{num_iter}_iters_{num_runs}_runs_{obs_embedding_size}_emb_of_{embedding_size}.csv', index=False)
-
-    #plot_measure_per_agent(run2agent2CTR_RMSE, 'CTR RMSE', log_y=True)
-    #plot_measure_per_agent(run2agent2CTR_bias, 'CTR Bias', optimal=1.0) #, yrange=(.5, 5.0))
-
-    shading_factor_df = plot_measure_per_agent(run2agent2gamma, 'Shading Factors')
-
-    def measure2df(run2measure, measure_name):
-        df_rows = {'Run': [], 'Iteration': [], measure_name: []}
-        for run, measures in run2measure.items():
-            for iteration, measure in enumerate(measures):
-                df_rows['Run'].append(run)
-                df_rows['Iteration'].append(iteration)
-                df_rows[measure_name].append(measure)
-        return pd.DataFrame(df_rows)
-
-    def plot_measure_overall(run2measure, measure_name):
-        # Generate DataFrame for Seaborn
-        if type(run2measure) != pd.DataFrame:
-            df = measure2df(run2measure, measure_name)
-        else:
-            df = run2measure
+    def plot_measure_over_runs(df, measure_name, cumulative=False, log_y=False, yrange=None, optimal=None):
         fig, axes = plt.subplots(figsize=FIGSIZE)
-        plt.title(f'{measure_name} Over Time', fontsize=FONTSIZE + 2)
-        sns.lineplot(data=df, x="Iteration", y=measure_name, ax=axes)
-        min_measure = min(0.0, np.min(df[measure_name]))
-        max_measure = max(0.0, np.max(df[measure_name]))
-        plt.xlabel('Iteration', fontsize=FONTSIZE)
+        plt.title(f'{measure_name} Over Runs', fontsize=FONTSIZE + 2)
+        min_measure, max_measure = 0.0, 0.0
+        sns.lineplot(data=df, x="Run", y=measure_name, hue="Agent", ax=axes)
         plt.xticks(fontsize=FONTSIZE - 2)
         plt.ylabel(f'{measure_name}', fontsize=FONTSIZE)
-        factor = 1.1 if min_measure < 0 else 0.9
-        plt.ylim(min_measure * factor, max_measure * 1.1)
+        if optimal is not None:
+            plt.axhline(optimal, ls='--', color='gray', label='Optimal')
+            min_measure = min(min_measure, optimal)
+        if log_y:
+            plt.yscale('log')
+        if yrange is None:
+            factor = 1.1 if min_measure < 0 else 0.9
+            # plt.ylim(min_measure * factor, max_measure * 1.1)
+        else:
+            plt.ylim(yrange[0], yrange[1])
         plt.yticks(fontsize=FONTSIZE - 2)
         plt.grid(True, 'major', 'y', ls='--', lw=.5, c='k', alpha=.3)
+        plt.legend(loc='upper left', bbox_to_anchor=(-.05, -.15), fontsize=FONTSIZE, ncol=3)
         plt.tight_layout()
-        plt.savefig(f"{output_dir}/{measure_name.replace(' ', '_')}_{rounds_per_iter}_rounds_{num_iter}_iters_{num_runs}_runs_{obs_embedding_size}_emb_of_{embedding_size}.pdf", bbox_inches='tight')
+        plt.savefig(f"{output_dir}/{measure_name.replace(' ', '_')}_{rounds_per_iter}_rounds_{num_iter}_iters_{num_runs}_runs.pdf", bbox_inches='tight')
+        plt.close()
         # plt.show()
         return df
 
-    auction_revenue_df = plot_measure_overall(run2auction_revenue, 'Auction Revenue')
+    plot_measure_over_runs(df, "Accomplish Value Rate")
+    plot_measure_over_runs(df, "Under Performance Value Rate")
+    plot_measure_over_runs(df, "Violation Value Rate")
+    plot_measure_over_runs(df, "Accomplish Spending Rate")
+    plot_measure_over_runs(df, "Under Performance Spending Rate")
+    plot_measure_over_runs(df, "Violation Spending Rate")
 
-    net_utility_df_overall = net_utility_df.groupby(['Run', 'Iteration'])['Net Utility'].sum().reset_index().rename(columns={'Net Utility': 'Social Surplus'})
-    plot_measure_overall(net_utility_df_overall, 'Social Surplus')
+    #plot_measure_over_runs(df, "Accomplish Value")
+    #plot_measure_over_runs(df, "Under Performance Value")
+    #plot_measure_over_runs(df, "Violation Value")
+    #plot_measure_over_runs(df, "Accomplish Spending")
+    #plot_measure_over_runs(df, "Under Performance Spending")
+    #plot_measure_over_runs(df, "Violation Spending")
+    
 
-    gross_utility_df_overall = gross_utility_df.groupby(['Run', 'Iteration'])['Gross Utility'].sum().reset_index().rename(columns={'Gross Utility': 'Social Welfare'})
-    plot_measure_overall(gross_utility_df_overall, 'Social Welfare')
 
-    auction_revenue_df['Measure Name'] = 'Auction Revenue'
-    net_utility_df_overall['Measure Name'] = 'Social Surplus'
-    gross_utility_df_overall['Measure Name'] = 'Social Welfare'
-
-    columns = ['Run', 'Iteration', 'Measure', 'Measure Name']
-    auction_revenue_df.columns = columns
-    net_utility_df_overall.columns = columns
-    gross_utility_df_overall.columns = columns
-
-    pd.concat((auction_revenue_df, net_utility_df_overall, gross_utility_df_overall)).to_csv(f'{output_dir}/results_{rounds_per_iter}_rounds_{num_iter}_iters_{num_runs}_runs_{obs_embedding_size}_emb_of_{embedding_size}.csv', index=False)

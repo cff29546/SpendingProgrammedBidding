@@ -33,7 +33,13 @@
       },
       "bidder": {
         "type": "IMPCBudgetBidder",
-        "kwargs": {"budget": 3000, "rounds_per_iter": 10000, "rounds_per_step": 100, "bid_step": 0.01, "memory": 10}
+        "kwargs": {
+            "budget_per_iter_range": [3000, 10000],
+            "rounds_per_iter": 10000,
+            "rounds_per_step": 100,
+            "bid_step": 0.01,
+            "memory": 10
+        }
       }
     }
   ],

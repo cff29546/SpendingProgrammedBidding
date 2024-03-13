@@ -38,8 +38,9 @@ class TruthfulBidder(Bidder):
 
 class BudgetRistrictedBidder(Bidder):
     """ A bidder with budget ristriction """
-    def __init__(self, rng, budget, rounds_per_iter):
+    def __init__(self, rng, budget_per_iter_range, rounds_per_iter):
         super(BudgetRistrictedBidder, self).__init__(rng)
+        budget = rng.uniform(*budget_per_iter_range)
         self.budget = budget
         self.spending = 0
 
@@ -52,8 +53,8 @@ class BudgetRistrictedBidder(Bidder):
 
 class TruthfulBudgetRistricctedBidder(BudgetRistrictedBidder):
     """ A simple bidder with budget ristriction """
-    def __init__(self, rng, budget, rounds_per_iter):
-        super(TruthfulBudgetRistricctedBidder, self).__init__(rng, budget, rounds_per_iter)
+    def __init__(self, rng, budget_per_iter_range, rounds_per_iter):
+        super(TruthfulBudgetRistricctedBidder, self).__init__(rng, budget_per_iter_range, rounds_per_iter)
         self.truthful = True
 
     def bid(self, value, context, estimated_CTR):
@@ -122,11 +123,11 @@ def impc(bid2spend, target):
 
 class IMPCBudgetBidder(BudgetRistrictedBidder):
     """ IMPC Budget pacing bidder """
-    def __init__(self, rng, budget, rounds_per_iter, rounds_per_step, bid_step, memory):
-        super(IMPCBudgetBidder, self).__init__(rng, budget, rounds_per_iter)
+    def __init__(self, rng, budget_per_iter_range, rounds_per_iter, rounds_per_step, bid_step, memory):
+        super(IMPCBudgetBidder, self).__init__(rng, budget_per_iter_range, rounds_per_iter)
         self.rounds_per_step = rounds_per_step
         self.rounds_per_iter = rounds_per_iter
-        self.target_step_spending = budget * rounds_per_step / rounds_per_iter
+        self.target_step_spending = self.budget * rounds_per_step / rounds_per_iter
         self.bid2spend_history = []
         self.bid_step = bid_step
         self.roi_bid = 1.0
@@ -189,8 +190,8 @@ def fit_model(spend, value):
 
 class SPBBidder(IMPCBudgetBidder):
     """ spb bidder """
-    def __init__(self, rng, budget, rounds_per_iter, rounds_per_step, bid_step, memory, spb_memory, explore_budget):
-        super(SPBBidder, self).__init__(rng, budget, rounds_per_iter, rounds_per_step, bid_step, memory)
+    def __init__(self, rng, budget_per_iter_range, rounds_per_iter, rounds_per_step, bid_step, memory, spb_memory, explore_budget):
+        super(SPBBidder, self).__init__(rng, budget_per_iter_range, rounds_per_iter, rounds_per_step, bid_step, memory)
         self.spb_memory = spb_memory
         self.explore_budget = explore_budget
         self.optimal_budget = -1
@@ -213,7 +214,7 @@ class SPBBidder(IMPCBudgetBidder):
         model_ready, a, b = False, 1, 1
         if len(self.spend_history) > 1:
             model_ready, a, b = fit_model(self.spend_history, self.value_history)
-        print("spb model: ", model_ready, a, b, self.optimal_budget, self.spend_history, self.value_history)
+        #print("spb model: ", model_ready, a, b, self.optimal_budget, self.spend_history, self.value_history)
         if model_ready:
             self.optimal_budget = np.minimum(np.maximum(opt_spend(a, b), self.explore_budget), self.budget)
         else:
@@ -227,8 +228,8 @@ class SPBBidder(IMPCBudgetBidder):
         self.value_history = []
 
 class MPCBidder(BudgetRistrictedBidder):
-    def __init__(self, rng, budget, rounds_per_iter, rounds_per_step, bid_step, memory, kp, ki, kd, bid_min, bid_max):
-        super(MPCBidder, self).__init__(rng, budget, rounds_per_iter)
+    def __init__(self, rng, budget_per_iter_range, rounds_per_iter, rounds_per_step, bid_step, memory, kp, ki, kd, bid_min, bid_max):
+        super(MPCBidder, self).__init__(rng, budget_per_iter_range, rounds_per_iter)
         self.rounds_per_step = rounds_per_step
         self.rounds_per_iter = rounds_per_iter
         self.bid_step = bid_step
@@ -294,7 +295,7 @@ class MPCBidder(BudgetRistrictedBidder):
                 self.prediction_diff = value / estimated_value
             else:
                 self.prediction_diff = 1.0
-            print(f"bid={self.roi_bid} diff={self.prediction_diff} e={estimated_value} v={value}")
+            #print(f"bid={self.roi_bid} diff={self.prediction_diff} e={estimated_value} v={value}")
 
     #def reset(self):
 

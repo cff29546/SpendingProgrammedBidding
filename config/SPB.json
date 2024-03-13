@@ -34,7 +34,7 @@
       "bidder": {
         "type": "SPBBidder",
         "kwargs": {
-            "budget": 3000, 
+            "budget_per_iter_range": [3000, 10000], 
             "rounds_per_iter": 10000,
             "rounds_per_step": 100,
             "bid_step": 0.01,

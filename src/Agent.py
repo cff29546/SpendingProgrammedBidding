@@ -20,6 +20,7 @@ class Agent:
         self.net_utility = .0
         self.gross_utility = .0
         self.spending = .0
+        self.budget = .0
 
         self.logs = []
 
@@ -92,6 +93,8 @@ class Agent:
         self.under_spending = .0
         self.violation_value = .0
         self.violation_spending = .0
+        if hasattr(self.bidder, 'budget'):
+            self.budget = self.bidder.budget
 
         if self.spending > 0:
             roi_vs_target = self.gross_utility / self.spending
@@ -129,6 +132,8 @@ class Agent:
         else:
             self.bidder.update(None, None, None, None, None, None, None, None, plot, figsize, fontsize, self.name)
 
+        if hasattr(self.bidder, 'budget'):
+            print(f'{self.name} budget={self.bidder.budget}')
 
     def get_allocation_regret(self):
         ''' How much value am I missing out on due to suboptimal allocation? '''
@@ -158,6 +163,7 @@ class Agent:
         self.net_utility = .0
         self.gross_utility = .0
         self.spending = .0
+        self.budget = .0
 
     def clear_logs(self):
         if not self.memory:

@@ -22,5 +22,5 @@
       }
     }
   ],
-  "output_dir": "results/SP_Oracle/"
+  "output_dir": "results/truthful/"
 }

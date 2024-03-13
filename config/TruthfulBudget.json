@@ -33,9 +33,12 @@
       },
       "bidder": {
         "type": "TruthfulBudgetRistricctedBidder",
-        "kwargs": {"budget": 3000, "rounds_per_iter": 10000}
+        "kwargs": {
+            "budget_per_iter_range": [3000, 10000], 
+            "rounds_per_iter": 10000
+        }
       }
     }
   ],
-  "output_dir": "results/spb/"
+  "output_dir": "results/truthful_budget/"
 }
