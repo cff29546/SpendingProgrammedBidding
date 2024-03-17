@@ -12,8 +12,9 @@ To demonstrate the SPB strategy, we've made the following modifications to the A
 
 ## Environment Settings
 
-- Each bidder bids for a single campaign; thus, each bidder, other than the environment bidder, has only one item, and its value is fixed over several budget cycles.
-- Each iteration is treated as a budget cycle for the campaign.
+- Each bidder bids for a single campaign in a single run; thus, each bidder, other than the environment bidder, has only one item, and its value is fixed over several budget cycles in that run.
+  Befor each run begin the campaign setting is random configured. Campaign setting including budget limit, item value and item embeddings.
+- Each iteration is treated as a budget cycle for the campaign, each run has a fix number of iterations and this number is 20 by default.
 - The performance of the bidding results is evaluated according to the standard described in the Spending Programmed Bidding paper.
 
 ## Run Simulation
@@ -34,6 +35,8 @@ python src/main.py -n 5 -d 2 -o results/spb5_2 config/SPB.json
 
 ## The Offline Experiment
 
+The offline experiment simulate each bidder with 500 random campaigns (runs) under different postback delay settings. 
+
 ### Reproduction scripts
 
 Simulation:
@@ -51,7 +54,7 @@ python src/main.py -n 500 -d 1 -o results/bid_cap500_1 config/BidCap.json
 python src/main.py -n 500 -d 2 -o results/bid_cap500_2 config/BidCap.json
 ```
 
-Report generation:
+Result compare and report generation:
 ```
 python src/compare.py -f png results/spb500_0 results/spb500_1 results/spb500_2 results/mpc500_0 results/mpc500_1 results/mpc500_2 results/bid_cap500_0 results/bid_cap500_1 results/bid_cap500_2
 ```
