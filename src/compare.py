@@ -40,6 +40,7 @@ def plot_measure_over_dim(df, measure_name, dim, cumulative=False, log_y=False, 
         delay_info = f'_delay_{int(dmin)}_{int(dmax)}'
     if dim == E1:
         dim = 'e1'
+    dim = dim.replace(' ', '_')
     plt.savefig(f"{output_dir}/{measure_name.replace(' ', '_')}_over_{dim}{delay_info}_compare.{fmt}", bbox_inches='tight')
     plt.close()
     return df
@@ -73,6 +74,9 @@ def plot_measure_over_dim_hist(df, measure_name, dim, cumulative=False, log_y=Fa
         delay_info = f'_delay_{int(dmax)}'
     else:
         delay_info = f'_delay_{int(dmin)}_{int(dmax)}'
+    if dim == E1:
+        dim = 'e1'
+    dim = dim.replace(' ', '_')
     plt.savefig(f"{output_dir}/{measure_name.replace(' ', '_')}_over_{dim}{delay_info}_compare.{fmt}", bbox_inches='tight')
     plt.close()
     return df

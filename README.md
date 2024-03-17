@@ -75,7 +75,7 @@ Figure 3:
     ![Violation Value over e1](./docs/offline_results/Violation_Value_Ratio_over_e1_delay_1_compare.png)
 
 Figure 4:
-    ![Value Ratio over Roi vs Target Roi](./docs/offline_results/Value_Ratio_over_Roi vs Target Roi_delay_1_compare.png)
+    ![Value Ratio over Roi vs Target Roi](./docs/offline_results/Value_Ratio_over_Roi_vs_Target_Roi_delay_1_compare.png)
 
 As mentioned in the paper, $`\epsilon1`$ is the ROI volatility tolerance parameter. According to Figure.3, the SPB bidding method sees less increase in the violation group’s Value(referred to as GMV in the paper)  ratio compared to the mpc method when reducing the ROI volatility tolerance. Meanwhile, due to its necessity to strictly meet the ROI target in each auction of our offline experiment, the BidCap method yields the smallest violation group Value ratio. 
 To further analyze the ROI constrained optimization capability of the SPB bidding method, we list the Value distribution over $`ROI_{result}/ROI_{target}`$ in Figure4. We can see that the Value distribution of SPB is shifted towards $`ROI_{result}/ROI_{target} = 1`$ compared to other bidding methods in our uniform offline environment. In more intricate industrial environments, similar to our paper's findings, the SPB bidding method could generate more Value with  $`ROI_{result}/ROI_{target} \ge 2.5+`$ compared to other bidding methods. 
