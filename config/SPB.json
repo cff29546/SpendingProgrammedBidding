@@ -40,7 +40,7 @@
             "bid_step": 0.01,
             "memory": 10,
             "spb_memory": 5,
-            "explore_budget": 100
+            "explore_bid_max": 1.1
         }
       }
     }

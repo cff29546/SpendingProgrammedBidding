@@ -122,10 +122,10 @@ def instantiate_auction(rng, config, agents2items, agents2item_values, agents, m
             config['num_iter'], config['rounds_per_iter'], config['output_dir'])
 
 
-def simulation_run():
+def simulation_run(run):
 
     for i in range(num_iter):
-        print(f'==== ITERATION {i} ====')
+        print(f'==== RUN {run} ITERATION {i} ====')
 
         for _ in tqdm(range(rounds_per_iter)):
             auction.simulate_opportunity()
@@ -194,15 +194,29 @@ def simulation_run():
 if __name__ == '__main__':
     # Parse commandline arguments
     parser = argparse.ArgumentParser()
+    parser.add_argument('-n', '--num-runs', type=int, help='Overwrite num of runs in config', default=0)
+    parser.add_argument('-o', '--output-dir', type=str, help='Overwrite output dir in config', default='')
+    parser.add_argument('-d', '--postback-delay', type=int, help='Overwrite postback delay in config', default=-1)
     parser.add_argument('config', type=str, help='Path to experiment configuration file')
     args = parser.parse_args()
 
     # Parse configuration file
     rng, config, agent_configs, agents2items, agents2item_values, num_runs, max_slots, embedding_size, embedding_var, obs_embedding_size = parse_config(args.config)
 
+    if args.num_runs:
+        num_runs = args.num_runs
+    if args.output_dir:
+        config['output_dir'] = args.output_dir
+    if args.postback_delay >= 0:
+        for i, agent in enumerate(config['agents']):
+            if 'postback_delay' in agent:
+                config['agents'][i]['postback_delay'] = args.postback_delay
+
     # Plotting config
     FIGSIZE = (8, 5)
     FONTSIZE = 14
+
+    E1 = '\u03b51'
 
     # Placeholders for summary statistics over all runs
     run2agent2net_utility = {}
@@ -249,7 +263,7 @@ if __name__ == '__main__':
         auction_revenue = []
 
         # Run simulation (with global parameters -- fine for the purposes of this script)
-        simulation_run()
+        simulation_run(run)
 
         # Store
         run2agent2net_utility[run] = agent2net_utility
@@ -273,6 +287,7 @@ if __name__ == '__main__':
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
+    PERF_GROUP = ['Violation', 'Under Performance', 'Accomplish']
     def perf_group(value, spending, budget, e1, e2, e3):
         target = 1.0
         if spending > 0 and budget > 0:
@@ -293,7 +308,12 @@ if __name__ == '__main__':
         return f'{cap:.1f}'
             
 
-    df_rows = {'Run': [], 'Agent': []}
+    df_rows = {'Run': [], 'Agent': [], 'Delay': []}
+
+    agents2delay = {
+        agent_config['name']: agent_config.get('postback_delay', 0)
+        for agent_config in agent_configs
+    }
  
     e1_range = [f'{e1/10.0:.1f}' for e1 in range(1,6,1)]
     roi_range = [f'{r/10.0:.1f}' for r in range(0,26,1)]
@@ -301,7 +321,7 @@ if __name__ == '__main__':
     agent2roi2value = {}
     for run in range(num_runs):
         for name in run2agent2gross_utility[run]:
-            if name.startswith("Environment"):
+            if name.startswith('Environment'):
                 continue
             group_value = {'Total': .0, 'Accomplish': .0, 'Violation': .0, 'Under Performance': .0}
             agent2e1value[name] = agent2e1value.get(name, {})
@@ -318,46 +338,54 @@ if __name__ == '__main__':
                 agent2e1value[name]['Total'] = agent2e1value[name].get('Total', 0.0) + value
                 agent2roi2value[name]['Total'] = agent2roi2value[name].get('Total', 0.0) + value
                 for e1 in e1_range:
+                    agent2e1value[name][e1] = agent2e1value[name].get(e1, {})
                     group = perf_group(value, spending, budget, float(e1), 0.2, 0.1)
-                    if group == 'Violation':
-                        agent2e1value[name][e1] = agent2e1value[name].get(e1, 0.0) + value
+                    agent2e1value[name][e1][group] = agent2e1value[name][e1].get(group, 0.0) + value
                 roi = roi_level(value, spending, 2.5)
                 agent2roi2value[name][roi] = agent2roi2value[name].get(roi, 0.0) + value
 
             df_rows['Run'].append(run)
             df_rows['Agent'].append(name)
+            df_rows['Delay'].append(agents2delay[name])
             for group, value in group_value.items():
                 df_rows[group + ' Value'] = df_rows.get(group + ' Value', [])
                 df_rows[group + ' Value'].append(value)
-                df_rows[group + ' Value Rate'] = df_rows.get(group + ' Value Rate', [])
-                df_rows[group + ' Value Rate'].append(value / max(group_value['Total'], 1))
+                df_rows[group + ' Value Ratio'] = df_rows.get(group + ' Value Ratio', [])
+                df_rows[group + ' Value Ratio'].append(value / max(group_value['Total'], 1))
                 df_rows[group + ' Spending'] = df_rows.get(group + ' Spending', [])
                 df_rows[group + ' Spending'].append(group_spending[group])
-                df_rows[group + ' Spending Rate'] = df_rows.get(group + ' Spending Rate', [])
-                df_rows[group + ' Spending Rate'].append(group_spending[group] / max(group_spending['Total'], 1))
+                df_rows[group + ' Spending Ratio'] = df_rows.get(group + ' Spending Ratio', [])
+                df_rows[group + ' Spending Ratio'].append(group_spending[group] / max(group_spending['Total'], 1))
 
     df = pd.DataFrame(df_rows)
     df.to_csv(f'{output_dir}/value_spend.csv')
 
-    e1_rows = {'Agent': [], 'e1': [], 'Violation Value Rate': []}
+    e1_rows = {'Agent': [], 'Delay': [], E1: []}
+    for group in PERF_GROUP:
+        e1_rows[f'{group} Value Ratio'] = []
+        e1_rows[f'{group} Value'] = []
     for name in agent2e1value:
         total = agent2e1value[name].get('Total', 0.0)
         for e1 in e1_range:
-            value = agent2e1value[name].get(e1, 0.0)
             e1_rows['Agent'].append(name)
-            e1_rows['e1'].append(float(e1))
-            e1_rows['Violation Value Rate'].append(value/total if total > 0 else 0)
+            e1_rows['Delay'].append(agents2delay[name])
+            e1_rows[E1].append(float(e1))
+            for group in PERF_GROUP:
+                value = agent2e1value[name][e1].get(group, 0.0)
+                e1_rows[f'{group} Value Ratio'].append(value/total if total > 0 else 0)
+                e1_rows[f'{group} Value'].append(value)
     e1df = pd.DataFrame(e1_rows)
     e1df.to_csv(f'{output_dir}/e1.csv')
 
-    roi_rows = {'Agent': [], 'Roi vs Target Roi': [], 'Value Rate': []}
+    roi_rows = {'Agent': [], 'Delay': [], 'Roi vs Target Roi': [], 'Value Ratio': []}
     for name in agent2roi2value:
         total = agent2roi2value[name].get('Total', 0.0)
         for roi in roi_range:
             value = agent2roi2value[name].get(roi, 0.0)
             roi_rows['Agent'].append(name)
+            roi_rows['Delay'].append(agents2delay[name])
             roi_rows['Roi vs Target Roi'].append(float(roi))
-            roi_rows['Value Rate'].append(value/total if total > 0 else 0)
+            roi_rows['Value Ratio'].append(value/total if total > 0 else 0)
     roidf = pd.DataFrame(roi_rows)
     roidf.to_csv(f'{output_dir}/roi.csv')
 
@@ -366,7 +394,7 @@ if __name__ == '__main__':
         fig, axes = plt.subplots(figsize=FIGSIZE)
         plt.title(f'{measure_name} Over {dim}', fontsize=FONTSIZE + 2)
         min_measure, max_measure = 0.0, 0.0
-        sns.lineplot(data=df, x=dim, y=measure_name, hue="Agent", ax=axes)
+        sns.lineplot(data=df, x=dim, y=measure_name, hue='Agent', ax=axes)
         plt.xticks(fontsize=FONTSIZE - 2)
         plt.ylabel(f'{measure_name}', fontsize=FONTSIZE)
         if optimal is not None:
@@ -385,17 +413,16 @@ if __name__ == '__main__':
         plt.tight_layout()
         plt.savefig(f"{output_dir}/{measure_name.replace(' ', '_')}_over_{dim}_{rounds_per_iter}_rounds_{num_iter}_iters_{num_runs}_runs.pdf", bbox_inches='tight')
         plt.close()
-        # plt.show()
         return df
 
-    plot_measure_over_dim(e1df, 'Violation Value Rate', 'e1')
-    plot_measure_over_dim(roidf, 'Value Rate', 'Roi vs Target Roi')
+    plot_measure_over_dim(e1df, 'Violation Value Ratio', E1)
+    plot_measure_over_dim(roidf, 'Value Ratio', 'Roi vs Target Roi')
 
     def plot_measure_over_runs(df, measure_name, cumulative=False, log_y=False, yrange=None, optimal=None):
         fig, axes = plt.subplots(figsize=FIGSIZE)
         plt.title(f'{measure_name} Over Runs', fontsize=FONTSIZE + 2)
         min_measure, max_measure = 0.0, 0.0
-        sns.lineplot(data=df, x="Run", y=measure_name, hue="Agent", ax=axes)
+        sns.lineplot(data=df, x='Run', y=measure_name, hue='Agent', ax=axes)
         plt.xticks(fontsize=FONTSIZE - 2)
         plt.ylabel(f'{measure_name}', fontsize=FONTSIZE)
         if optimal is not None:
@@ -414,22 +441,21 @@ if __name__ == '__main__':
         plt.tight_layout()
         plt.savefig(f"{output_dir}/{measure_name.replace(' ', '_')}_{rounds_per_iter}_rounds_{num_iter}_iters_{num_runs}_runs.pdf", bbox_inches='tight')
         plt.close()
-        # plt.show()
         return df
 
-    plot_measure_over_runs(df, "Accomplish Value Rate")
-    plot_measure_over_runs(df, "Under Performance Value Rate")
-    plot_measure_over_runs(df, "Violation Value Rate")
-    plot_measure_over_runs(df, "Accomplish Spending Rate")
-    plot_measure_over_runs(df, "Under Performance Spending Rate")
-    plot_measure_over_runs(df, "Violation Spending Rate")
+    #plot_measure_over_runs(df, 'Accomplish Value Ratio')
+    #plot_measure_over_runs(df, 'Under Performance Value Ratio')
+    #plot_measure_over_runs(df, 'Violation Value Ratio')
+    #plot_measure_over_runs(df, 'Accomplish Spending Ratio')
+    #plot_measure_over_runs(df, 'Under Performance Spending Ratio')
+    #plot_measure_over_runs(df, 'Violation Spending Ratio')
 
-    #plot_measure_over_runs(df, "Accomplish Value")
-    #plot_measure_over_runs(df, "Under Performance Value")
-    #plot_measure_over_runs(df, "Violation Value")
-    #plot_measure_over_runs(df, "Accomplish Spending")
-    #plot_measure_over_runs(df, "Under Performance Spending")
-    #plot_measure_over_runs(df, "Violation Spending")
+    #plot_measure_over_runs(df, 'Accomplish Value')
+    #plot_measure_over_runs(df, 'Under Performance Value')
+    #plot_measure_over_runs(df, 'Violation Value')
+    #plot_measure_over_runs(df, 'Accomplish Spending')
+    #plot_measure_over_runs(df, 'Under Performance Spending')
+    #plot_measure_over_runs(df, 'Violation Spending')
     
 
 

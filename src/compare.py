@@ -1,18 +1,21 @@
 import matplotlib.pyplot as plt
 import pandas as pd
+import numpy as np
 import seaborn as sns
 import os
 
 FIGSIZE = (8, 5)
 FONTSIZE = 14
+E1 = '\u03b51'
 output_dir = '.'
+fmt = 'pdf'
 
 def plot_measure_over_dim(df, measure_name, dim, cumulative=False, log_y=False, yrange=None, optimal=None):
     fig, axes = plt.subplots(figsize=FIGSIZE)
     plt.title(f'{measure_name} Over {dim}', fontsize=FONTSIZE + 2)
     min_measure, max_measure = 0.0, 0.0
-    sns.lineplot(data=df, x=dim, y=measure_name, hue="Agent", ax=axes)
-    plt.xticks(fontsize=FONTSIZE - 2)
+    sns.lineplot(data=df, x=dim, y=measure_name, hue='Agent', ax=axes)
+    plt.xticks(np.arange(df[dim].min(), df[dim].max() + 0.1, 0.1), fontsize=FONTSIZE - 2)
     plt.ylabel(f'{measure_name}', fontsize=FONTSIZE)
     if optimal is not None:
         plt.axhline(optimal, ls='--', color='gray', label='Optimal')
@@ -28,16 +31,26 @@ def plot_measure_over_dim(df, measure_name, dim, cumulative=False, log_y=False, 
     plt.grid(True, 'major', 'y', ls='--', lw=.5, c='k', alpha=.3)
     plt.legend(loc='upper left', bbox_to_anchor=(-.05, -.15), fontsize=FONTSIZE, ncol=3)
     plt.tight_layout()
-    plt.savefig(f"{output_dir}/{measure_name.replace(' ', '_')}_over_{dim}_compare.pdf", bbox_inches='tight')
+    delay_info = ''
+    dmax = df['Delay'].max()
+    dmin = df['Delay'].min()
+    if dmax == dmin:
+        delay_info = f'_delay_{int(dmax)}'
+    else:
+        delay_info = f'_delay_{int(dmin)}_{int(dmax)}'
+    if dim == E1:
+        dim = 'e1'
+    plt.savefig(f"{output_dir}/{measure_name.replace(' ', '_')}_over_{dim}{delay_info}_compare.{fmt}", bbox_inches='tight')
     plt.close()
     return df
 
-def plot_measure_over_runs(df, measure_name, cumulative=False, log_y=False, yrange=None, optimal=None):
+def plot_measure_over_dim_hist(df, measure_name, dim, cumulative=False, log_y=False, yrange=None, optimal=None):
     fig, axes = plt.subplots(figsize=FIGSIZE)
-    plt.title(f'{measure_name} Over Runs', fontsize=FONTSIZE + 2)
+    plt.title(f'{measure_name} Over {dim}', fontsize=FONTSIZE + 2)
     min_measure, max_measure = 0.0, 0.0
-    sns.lineplot(data=df, x="Run", y=measure_name, hue="Agent", ax=axes)
-    plt.xticks(fontsize=FONTSIZE - 2)
+    #sns.lineplot(data=df, x=dim, y=measure_name, hue='Agent', ax=axes)
+    sns.histplot(data=df, x=dim, weights=measure_name, bins=list(np.arange(-0.05,2.55,0.1)), kde=False, hue='Agent', ax=axes, element='bars', multiple='dodge', shrink=.8) 
+    plt.xticks(np.arange(df[dim].min(), df[dim].max() + 0.5, 0.5), fontsize=FONTSIZE - 2)
     plt.ylabel(f'{measure_name}', fontsize=FONTSIZE)
     if optimal is not None:
         plt.axhline(optimal, ls='--', color='gray', label='Optimal')
@@ -51,9 +64,41 @@ def plot_measure_over_runs(df, measure_name, cumulative=False, log_y=False, yran
         plt.ylim(yrange[0], yrange[1])
     plt.yticks(fontsize=FONTSIZE - 2)
     plt.grid(True, 'major', 'y', ls='--', lw=.5, c='k', alpha=.3)
-    plt.legend(loc='upper left', bbox_to_anchor=(-.05, -.15), fontsize=FONTSIZE, ncol=3)
+    sns.move_legend(axes, loc='upper left', bbox_to_anchor=(-.05, -.15), fontsize=FONTSIZE, ncol=3)
     plt.tight_layout()
-    plt.savefig(f"{output_dir}/{measure_name.replace(' ', '_')}_over_runs_compare.pdf", bbox_inches='tight')
+    delay_info = ''
+    dmax = df['Delay'].max()
+    dmin = df['Delay'].min()
+    if dmax == dmin:
+        delay_info = f'_delay_{int(dmax)}'
+    else:
+        delay_info = f'_delay_{int(dmin)}_{int(dmax)}'
+    plt.savefig(f"{output_dir}/{measure_name.replace(' ', '_')}_over_{dim}{delay_info}_compare.{fmt}", bbox_inches='tight')
+    plt.close()
+    return df
+
+def plot_measure_over_delay(df, measure_name, cumulative=False, log_y=False, yrange=None, optimal=None):
+    fig, axes = plt.subplots(figsize=FIGSIZE)
+    plt.title(f'{measure_name} Over Delay Level', fontsize=FONTSIZE + 2)
+    min_measure, max_measure = 0.0, 0.0
+    sns.histplot(data=df, x='Delay', weights=measure_name, discrete=True, hue='Agent', element='bars', multiple='dodge', shrink=.8, ax=axes)
+    plt.xticks(range(df['Delay'].max() + 1),fontsize=FONTSIZE - 2)
+    plt.ylabel(f'{measure_name}', fontsize=FONTSIZE)
+    if optimal is not None:
+        plt.axhline(optimal, ls='--', color='gray', label='Optimal')
+        min_measure = min(min_measure, optimal)
+    if log_y:
+        plt.yscale('log')
+    if yrange is None:
+        factor = 1.1 if min_measure < 0 else 0.9
+        # plt.ylim(min_measure * factor, max_measure * 1.1)
+    else:
+        plt.ylim(yrange[0], yrange[1])
+    plt.yticks(fontsize=FONTSIZE - 2)
+    plt.grid(True, 'major', 'y', ls='--', lw=.5, c='k', alpha=.3)
+    sns.move_legend(axes, loc='upper left', bbox_to_anchor=(-.05, -.15), fontsize=FONTSIZE, ncol=3)
+    plt.tight_layout()
+    plt.savefig(f"{output_dir}/{measure_name.replace(' ', '_')}_over_delay_level_compare.{fmt}", bbox_inches='tight')
     plt.close()
     return df
 
@@ -70,6 +115,7 @@ if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser(description='bidder compare')
     parser.add_argument('-o', '--output', type=str, default='results')
+    parser.add_argument('-f', '--format', type=str, default='pdf', choices=['pdf', 'png'])
     parser.add_argument('bidders', nargs='*', default=[])
     args = parser.parse_args()
 
@@ -78,24 +124,32 @@ if __name__ == '__main__':
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
+    fmt = args.format
+
     e1df = concat_csv(args.bidders, 'e1.csv')
-    plot_measure_over_dim(e1df, 'Violation Value Rate', 'e1')
+    for i in range(e1df['Delay'].max() + 1):
+        plot_measure_over_dim(e1df[e1df['Delay'] == i], 'Violation Value Ratio', E1)
     roidf = concat_csv(args.bidders, 'roi.csv')
-    plot_measure_over_dim(roidf, 'Value Rate', 'Roi vs Target Roi')
+    for i in range(roidf['Delay'].max() + 1):
+        plot_measure_over_dim_hist(roidf[roidf['Delay'] == i], 'Value Ratio', 'Roi vs Target Roi')
     df = concat_csv(args.bidders, 'value_spend.csv')
+    keys = [
+        'Total Value',
+        'Total Spending',
+        'Accomplish Value',
+        'Accomplish Spending',
+        'Violation Value',
+        'Violation Spending',
+        'Under Performance Value',
+        'Under Performance Spending'
+    ]
+    sumdf = df.groupby(['Agent', 'Delay'])[keys].sum().reset_index()
+    for key in keys:
+        sumdf[f'{key} Ratio'] = sumdf[key]/sumdf['Total Value']
+    print(sumdf)
 
-    plot_measure_over_runs(df, "Accomplish Value Rate")
-    #plot_measure_over_runs(df, "Under Performance Value Rate")
-    #plot_measure_over_runs(df, "Violation Value Rate")
-    #plot_measure_over_runs(df, "Accomplish Spending Rate")
-    #plot_measure_over_runs(df, "Under Performance Spending Rate")
-    #plot_measure_over_runs(df, "Violation Spending Rate")
-
-    plot_measure_over_runs(df, "Accomplish Value")
-    #plot_measure_over_runs(df, "Under Performance Value")
-    #plot_measure_over_runs(df, "Violation Value")
-    #plot_measure_over_runs(df, "Accomplish Spending")
-    #plot_measure_over_runs(df, "Under Performance Spending")
-    #plot_measure_over_runs(df, "Violation Spending")
-
+    for key in keys:
+        plot_measure_over_delay(sumdf, key)
+        if not key.startswith('Total'):
+            plot_measure_over_delay(sumdf, f'{key} Ratio')
 
