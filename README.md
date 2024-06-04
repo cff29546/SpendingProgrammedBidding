@@ -13,7 +13,7 @@ To demonstrate the SPB strategy, we've made the following modifications to the A
 ## Environment Settings
 
 - Each bidder bids for a single campaign in a single run; thus, each bidder, other than the environment bidder, has only one item, and its value is fixed over several budget cycles in that run.
-  Befor each run begin the campaign setting is random configured. Campaign setting including budget limit, item value and item embeddings.
+  Before each run begin the campaign setting is random configured. Campaign setting including budget limit, item value and item embeddings.
 - Each iteration is treated as a budget cycle for the campaign, each run has a fix number of iterations and this number is 20 by default.
 - The performance of the bidding results is evaluated according to the standard described in the Spending Programmed Bidding paper.
 
