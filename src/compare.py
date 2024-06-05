@@ -39,8 +39,8 @@ def plot_measure_over_dim(df, measure_name, dim, cumulative=False, log_y=False, 
     #plt.title(f'{measure_name} Over {dim}', fontsize=FONTSIZE + 2, y=-0.2)
     min_measure, max_measure = 0.0, 0.0
     if paper:
-        sns.lineplot(data=df, x=dim, y=measure_name, hue='Agent', ax=axes
-                ,palette=['0', '0', '0'], style='Agent', style_order=sorted(name_map.values()), dashes=[(1, 1), (4, 2), (1, 0)], markers=True)
+        sns.lineplot(data=df, x=dim, y=measure_name, hue='Agent', ax=axes, palette=['0', '0', '0'],
+                style='Agent', style_order=sorted(name_map.values()), dashes=[(1, 1), (4, 2), (1, 0)], markers=True)
     else:
         sns.lineplot(data=df, x=dim, y=measure_name, hue='Agent', ax=axes)
     plt.xticks(np.arange(df[dim].min(), df[dim].max() + 0.1, 0.1), fontsize=FONTSIZE - 2)
@@ -91,8 +91,9 @@ def plot_measure_over_dim_hist(df, measure_name, dim, cumulative=False, log_y=Fa
     #plt.title(f'{measure_name} Over {dim}', fontsize=FONTSIZE + 2, y=-0.2)
     min_measure, max_measure = 0.0, 0.0
     #sns.lineplot(data=df, x=dim, y=measure_name, hue='Agent', ax=axes)
+    hue_order = sorted(name_map.values())
     sns.histplot(data=df, x=dim, weights=measure_name, bins=list(np.arange(-0.05,2.55,0.1)), kde=False,
-            hue='Agent', ax=axes, element='bars', multiple='dodge', shrink=.5) 
+            hue='Agent', hue_order=hue_order, ax=axes, element='bars', multiple='dodge', shrink=.5)
     plt.xticks(np.arange(df[dim].min(), df[dim].max() + 0.5, 0.5), fontsize=FONTSIZE - 2)
     name = measure_map.get(measure_name, measure_name)
     plt.ylabel(name, loc='bottom', fontsize=FONTSIZE, rotation=270)
