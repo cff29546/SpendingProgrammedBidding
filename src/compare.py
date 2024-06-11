@@ -31,7 +31,7 @@ if paper:
         'Value Ratio': 'GMV Density (%)',
     }
 
-    dim_map = {'Roi vs Target Roi': '$R_{result}/R_{target}$'}
+    dim_map = {'Roi vs Target Roi': '$R_{res}/R_{target}$'}
 
 def plot_measure_over_dim(df, measure_name, dim, cumulative=False, log_y=False, yrange=None, optimal=None):
     fig, axes = plt.subplots(figsize=FIGSIZE)
