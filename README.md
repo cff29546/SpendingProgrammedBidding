@@ -1,6 +1,6 @@
 ## Spending Programmed Bidding
 
-This repository contains the source code for the bidding strategy used in 'Spending Programmed Bidding: Privacy-friendly Bid Optimization with ROI Constraint in Online Advertising.' It employs a modified version of [Auction Gym](https://github.com/amzn/auction-gym) as the simulation environment.
+This repository contains the source code for the bidding strategy used in [KDD2024: Spending Programmed Bidding: Privacy-friendly Bid Optimization with ROI Constraint in Online Advertising](https://dl.acm.org/doi/10.1145/3637528.3671540). It employs a modified version of [Auction Gym](https://github.com/amzn/auction-gym) as the simulation environment.
 
 ## Framework Modification
 
